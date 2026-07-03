@@ -24,13 +24,13 @@ Generate outputs into strict, schema-validated JSON using Zod (TypeScript) or Py
 ## When not to use this skill
 
 - The user wants free-form text, summaries, or conversational responses
-- The input is an image that needs OCR first — use `ocr`, then apply structured output
-- The input is audio — use `speech-to-text` first, then apply structured output if needed
+- The input is an image that needs OCR first → use `ocr`, then apply structured output
+- The input is audio → use `speech-to-text` first, then apply structured output if needed
 
 ## Workflow
 
 1. Identify the target output shape from the user's request.
-2. Define a Zod (TypeScript) or Pydantic (Python) schema that matches the expected structure.
+2. Define a Zod (TypeScript) or Pydantic (Python) schema matching the expected structure.
 3. Pass the schema via the SDK's structured-output mechanism:
    - Vercel AI SDK: `generateObject({ schema })`
    - OpenAI SDK: `response_format` with `zodResponseFormat` (TS) or `json_schema` (Python)
@@ -77,10 +77,7 @@ const interfaze = new ChatOpenAI({
 ```python
 from openai import OpenAI
 
-interfaze = OpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-)
+interfaze = OpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>")
 ```
 
 ### Python — LangChain SDK
@@ -88,14 +85,10 @@ interfaze = OpenAI(
 ```python
 from langchain_openai import ChatOpenAI
 
-interfaze = ChatOpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-    model="interfaze-beta",
-)
+interfaze = ChatOpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>", model="interfaze-beta")
 ```
 
-## Example: Generate a structured object from a prompt
+## Example: generate a structured object from a prompt
 
 ### TypeScript — OpenAI SDK
 
@@ -202,14 +195,11 @@ response = structured_llm.invoke("Write a Python script to check CPU type using 
 print(response)
 ```
 
-## Example: Array of structured objects
+## Example: array of structured objects
 
-### TypeScript — Vercel AI SDK
+Use an array at the top level (or a wrapper object with a list field):
 
 ```ts
-import { generateObject } from "ai";
-import { z } from "zod";
-
 const { object } = await generateObject({
   model: interfaze.chat("interfaze-beta"),
   schema: z.array(
@@ -222,41 +212,105 @@ const { object } = await generateObject({
   prompt: "List the top 5 programming languages by popularity.",
 });
 ```
-
-### Python — OpenAI SDK
-
 ```python
-from typing import List
-from pydantic import BaseModel
-
 class Language(BaseModel):
     name: str
     rank: int
     primary_use_case: str
 
 class LanguagesSchema(BaseModel):
-    languages: List[Language]
-
-response = interfaze.chat.completions.create(
-    model="interfaze-beta",
-    messages=[{"role": "user", "content": "List the top 5 programming languages by popularity."}],
-    response_format={
-        "type": "json_schema",
-        "json_schema": {"name": "languages_schema", "schema": LanguagesSchema.model_json_schema()},
-    },
-)
+    languages: list[Language]
 ```
-
-The other SDK variants follow the basic-object pattern with the schema replaced.
 
 ## Schema design tips
 
 - Use `.nullable()` (Zod) or `Optional[T] = None` (Pydantic) for fields that may not be present.
 - Use `.describe()` (Zod) or `Field(description=...)` (Pydantic) to clarify ambiguous fields — the model reads these descriptions.
-- Use `z.array(...)` / `List[...]` at the top level when extracting lists of items.
+- Use `z.array(...)` / `List[...]` at the top level when extracting lists.
 - Keep schemas focused. Prefer multiple targeted calls over one massive schema.
 
-## Available references
+## Schema patterns
 
-- [references/schemas.md](references/schemas.md) — Common schema patterns
-- [references/examples.md](references/examples.md) — Additional trigger examples
+Basic objects and arrays are shown above. Other common shapes:
+
+### Nullable fields
+
+Use when a field may not exist in the source data.
+
+```ts
+z.object({
+  name: z.string(),
+  email: z.string().nullable(),
+  phone: z.string().nullable(),
+})
+```
+```python
+from typing import Optional
+
+class Contact(BaseModel):
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+```
+
+### Described fields
+
+Use `.describe()` (Zod) or `Field(description=...)` (Pydantic) when the field name alone is ambiguous — the model reads these.
+
+```ts
+z.object({
+  items: z.array(z.object({ name: z.string(), price: z.string() })),
+  highlighted_items: z.array(
+    z.object({ name: z.string(), price: z.string() })
+  ).describe("items that are visually highlighted or marked in the source"),
+})
+```
+```python
+from pydantic import Field
+
+class Item(BaseModel):
+    name: str
+    price: str
+
+class ReceiptSchema(BaseModel):
+    items: list[Item]
+    highlighted_items: list[Item] = Field(
+        ..., description="items that are visually highlighted or marked in the source"
+    )
+```
+
+### Nested coordinates (spatial extraction)
+
+```ts
+z.object({
+  text_in_original_language: z.string(),
+  bounds: z.array(
+    z.object({
+      top_left_x: z.number(),
+      top_left_y: z.number(),
+      bottom_right_x: z.number(),
+      bottom_right_y: z.number(),
+    })
+  ).describe("bounding box for each line"),
+})
+```
+```python
+from pydantic import Field
+
+class Bound(BaseModel):
+    top_left_x: float
+    top_left_y: float
+    bottom_right_x: float
+    bottom_right_y: float
+
+class SpatialSchema(BaseModel):
+    text_in_original_language: str
+    bounds: list[Bound] = Field(..., description="bounding box for each line")
+```
+
+## Response handling
+
+- All SDKs return an object that matches your schema exactly.
+- Vercel AI SDK: `const { object } = await generateObject({ schema, ... })`; invalid responses are retried automatically.
+- OpenAI SDK: parse `response.choices[0].message.content` as JSON.
+- LangChain SDK: the call returns the typed object directly.

@@ -10,7 +10,7 @@ description: >
 
 # Web Search with Interfaze AI
 
-Search the web and retrieve current information using Interfaze AI's built-in web search index. No tool config required — just send a prompt that needs current information.
+Search the web and retrieve current information using Interfaze AI's built-in web search index. No tool config required — just send a prompt that needs current information and the model searches as needed.
 
 ## When to use this skill
 
@@ -18,20 +18,19 @@ Search the web and retrieve current information using Interfaze AI's built-in we
 - The user asks about prices, availability, news, events, or recent developments
 - The user says "search for", "look up", "find out about", "what's the latest"
 - The task requires verifying facts against current web sources
-- The user provides a topic and needs comprehensive, up-to-date information about it
+- The user provides a topic and needs comprehensive, up-to-date information
 
 ## When not to use this skill
 
-- The question can be answered from the model's existing knowledge
-- The user wants to scrape a specific URL for structured data — use `web-scraping`
-- The user has an image or audio to process — use `ocr`, `object-detection`, or `speech-to-text`
-- The user wants to extract data from a specific known page — use `web-scraping`
+- The question can be answered from the model's existing knowledge (e.g. "what is 2 + 2", "explain `let` vs `const`")
+- The user wants to extract data from a specific known URL → use `web-scraping`
+- The user has an image or audio to process → use `ocr`, `object-detection`, or `speech-to-text`
 
 ## Workflow
 
 1. Identify what information the user needs from the web.
-2. Formulate a clear search prompt.
-3. Use a structured-output call when you want typed results, or a plain text call for a natural-language summary.
+2. Formulate a clear, specific search prompt.
+3. Use a structured-output call for typed results, or a plain text call for a natural-language summary.
 4. The model returns results directly; raw hits are available via `precontext`.
 
 ## Setup
@@ -75,10 +74,7 @@ const interfaze = new ChatOpenAI({
 ```python
 from openai import OpenAI
 
-interfaze = OpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-)
+interfaze = OpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>")
 ```
 
 ### Python — LangChain SDK
@@ -86,14 +82,10 @@ interfaze = OpenAI(
 ```python
 from langchain_openai import ChatOpenAI
 
-interfaze = ChatOpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-    model="interfaze-beta",
-)
+interfaze = ChatOpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>", model="interfaze-beta")
 ```
 
-## Example: Basic web search (text summary)
+## Example: basic web search (text summary)
 
 ### TypeScript — OpenAI SDK
 
@@ -146,7 +138,7 @@ response = interfaze.invoke("Latest news on Nvidia")
 print(response.content)
 ```
 
-## Example: Structured web search
+## Example: structured web search
 
 ### TypeScript — OpenAI SDK
 
@@ -241,14 +233,11 @@ response = structured_llm.invoke("Latest news on Nvidia")
 
 For structured queries, Interfaze may also follow up with a web extract pass — that result appears as a separate `precontext` entry with `name: "web_extract"`.
 
-## Example: Look up a company
+## Example: look up a company
 
-### TypeScript — Vercel AI SDK
+Same call — use a schema shaped for the entity:
 
 ```ts
-import { generateObject } from "ai";
-import { z } from "zod";
-
 const { object } = await generateObject({
   model: interfaze.chat("interfaze-beta"),
   schema: z.object({
@@ -262,11 +251,23 @@ const { object } = await generateObject({
 });
 ```
 
+## Raw results via precontext
+
+Raw search hits (`title`, `description`, `content`, `snippets`, `url` per hit) are returned on the response's `precontext` array — `response.precontext` (OpenAI SDK / Python) or `response.body?.precontext` (Vercel AI SDK).
+
+```ts
+// @ts-expect-error precontext is not typed
+const precontext = response.precontext ?? response.body?.precontext;
+console.log(precontext[0]?.result); // array of search hits
+```
+
 ## Coverage
 
-Interfaze's web search covers research indexes (biology, finance, medicine, law, arxiv), social platforms (LinkedIn, X, personal sites), financial data (stocks, forex, crypto, SEC filings), and general (news, events, products, company info).
+Interfaze's web search covers research indexes (biology, finance, medicine, law, arxiv), social platforms (LinkedIn, X, personal sites), financial data (stocks, forex, crypto, commodities, SEC filings), and general (news, events, products, company info).
 
-## Available references
+## Tips
 
-- [references/api.md](references/api.md) — API usage details, precontext metadata
-- [references/examples.md](references/examples.md) — Additional trigger examples and patterns
+- Be specific. "Find the price of X on Amazon" works better than "look up X."
+- Use structured output when you need machine-readable results.
+- A web search is triggered automatically when the prompt requires current information.
+- To normalize results further, combine with `structured-output`.

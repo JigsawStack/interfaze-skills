@@ -4,7 +4,7 @@ Installable [Agent Skills](https://agentskills.io) for [Interfaze AI](https://in
 
 ## What is Interfaze AI?
 
-Interfaze AI is a proprietary multimodal AI model accessible through an OpenAI-compatible API. It handles vision OCR, speech-to-text, structured output, object detection, web scraping, and document processing through a single unified endpoint — no tool routing or multi-provider setup required.
+Interfaze AI is a proprietary multimodal AI model accessible through an chat-completions compatible API. It handles vision OCR, speech-to-text, structured output, object detection, web scraping, and document processing through a single unified endpoint — no tool routing or multi-provider setup required.
 
 ## Included skills
 

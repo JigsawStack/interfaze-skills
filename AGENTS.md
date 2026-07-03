@@ -11,7 +11,7 @@ This repo contains installable Agent Skills for Interfaze AI. Follow these rules
 
 ## Supported SDKs and languages
 
-Every skill must show code examples for all supported SDK + language combinations the docs cover:
+Show all supported SDK + language combinations for the **primary** example of each skill. For secondary examples, show just the schema (or prompt) and note that the call shape matches the primary example — do not repeat near-identical blocks across every SDK. The combinations the docs cover:
 
 - **TypeScript**: OpenAI SDK (`openai`), Vercel AI SDK (`@ai-sdk/openai` + `ai`), LangChain SDK (`@langchain/openai`).
 - **Python**: OpenAI SDK (`openai`), LangChain SDK (`langchain-openai`).
@@ -28,7 +28,8 @@ Use these section labels consistently inside each example, in this order:
 
 - Keep skill descriptions precise and trigger-oriented. The `description` field is the primary routing surface.
 - Prefer narrow, capability-specific skills over broad catch-all skills.
-- Put reusable API details and long examples in `references/` files, not inside `SKILL.md`.
+- Each skill is a single self-contained `SKILL.md` — setup, input formats, all examples, and advanced `<task>` modes live there. Do not split content into `references/`; keep one source of truth per skill.
+- Do not create empty scaffold directories (e.g. `assets/`, `references/`). Add a directory only when it holds real files.
 - Maintain naming consistency: folder names must match the `name` field in frontmatter.
 
 ## Writing style
