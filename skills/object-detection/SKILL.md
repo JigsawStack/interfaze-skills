@@ -23,16 +23,17 @@ Detect and locate objects in images with bounding box coordinates using Interfaz
 
 ## When not to use this skill
 
-- The user only wants to read text from an image — use `ocr`
-- The user wants to transcribe audio — use `speech-to-text`
+- The user only wants to read text from an image → use `ocr`
+- The user wants to transcribe audio → use `speech-to-text`
 - The input is not an image
 - The user wants image classification without location data
+- The user wants to scrape a URL → use `web-scraping`
 
 ## Workflow
 
 1. Confirm the input is an image URL or base64-encoded image.
 2. Determine what objects the user wants to detect, or if they want all objects.
-3. Build a schema with object names and bounding box coordinate fields (`top_left_x`, `top_left_y`, `bottom_right_x`, `bottom_right_y`).
+3. Build a schema with object names and bounding box fields (`top_left_x`, `top_left_y`, `bottom_right_x`, `bottom_right_y`).
 4. Call the chosen SDK with the image and a prompt describing what to detect.
 5. Return the detected objects with their positions.
 
@@ -77,10 +78,7 @@ const interfaze = new ChatOpenAI({
 ```python
 from openai import OpenAI
 
-interfaze = OpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-)
+interfaze = OpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>")
 ```
 
 ### Python — LangChain SDK
@@ -88,14 +86,19 @@ interfaze = OpenAI(
 ```python
 from langchain_openai import ChatOpenAI
 
-interfaze = ChatOpenAI(
-    base_url="https://api.interfaze.ai/v1",
-    api_key="<your-api-key>",
-    model="interfaze-beta",
-)
+interfaze = ChatOpenAI(base_url="https://api.interfaze.ai/v1", api_key="<your-api-key>", model="interfaze-beta")
 ```
 
-## Example: Detect objects and text with positions
+## Input formats
+
+Model name is always `interfaze-beta`. Images pass in the message `content` array (same as OCR). Coordinates are returned in pixels relative to the original image dimensions.
+
+| SDK | Image part |
+| --- | --- |
+| Vercel AI SDK | `{ type: "image", mediaType: "image/png", image: "<url>" }` |
+| OpenAI / LangChain (TS & Py) | `{ type: "image_url", image_url: { url: "<url>" } }` |
+
+## Example: detect objects and text with positions
 
 ### TypeScript — OpenAI SDK
 
@@ -313,14 +316,11 @@ response = structured_llm.invoke([
 print(response)
 ```
 
-## Example: Detect specific object categories
+## Example: detect specific object categories
 
-### TypeScript — Vercel AI SDK
+Same call — swap in a schema with a `category` field:
 
 ```ts
-import { generateObject } from "ai";
-import { z } from "zod";
-
 const TrafficSchema = z.object({
   objects: z.array(
     z.object({
@@ -333,28 +333,8 @@ const TrafficSchema = z.object({
     })
   ),
 });
-
-const { object } = await generateObject({
-  model: interfaze.chat("interfaze-beta"),
-  schema: TrafficSchema,
-  messages: [
-    {
-      role: "user",
-      content: [
-        { type: "text", text: "Detect all vehicles and pedestrians in this image" },
-        { type: "image", image: "https://example.com/street.jpg" },
-      ],
-    },
-  ],
-});
 ```
-
-### Python — OpenAI SDK
-
 ```python
-from typing import List
-from pydantic import BaseModel, Field
-
 class TrafficObject(BaseModel):
     name: str
     category: str = Field(..., description="vehicle or pedestrian")
@@ -364,33 +344,115 @@ class TrafficObject(BaseModel):
     bottom_right_y: float
 
 class TrafficSchema(BaseModel):
-    objects: List[TrafficObject]
+    objects: list[TrafficObject]
+```
 
+## Tips
+
+- Be specific in the prompt about what to detect. "Find all vehicles" works better than "detect objects."
+- Use `.describe()` / `Field(description=...)` on the name field to guide labelling.
+- Add a `category` field to group objects by type.
+- Coordinates are returned in pixels relative to the original image dimensions.
+
+## Advanced: raw detection output
+
+For maximum speed and lowest cost without a custom schema, set `<task>object_detection</task>` in the system message — returns a fixed structure with `detected_objects` (each with `bounds` and `label`) and `gui_elements`.
+
+### TypeScript — OpenAI SDK
+
+```ts
+const response = await interfaze.chat.completions.create({
+  model: "interfaze-beta",
+  messages: [
+    { role: "system", content: "<task>object_detection</task>" },
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Detect objects in this image" },
+        { type: "image_url", image_url: { url: "<url>" } },
+      ],
+    },
+  ],
+  response_format: zodResponseFormat(z.any(), "empty_schema"),
+});
+```
+
+### TypeScript — Vercel AI SDK
+
+```ts
+const { object } = await generateObject({
+  model: interfaze.chat("interfaze-beta"),
+  system: "<task>object_detection</task>",
+  schema: z.any(),
+  messages: [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: "Detect objects in this image" },
+        { type: "image", mediaType: "image/png", image: "<url>" },
+      ],
+    },
+  ],
+});
+```
+
+### TypeScript — LangChain SDK
+
+```ts
+const structuredModel = interfaze.withStructuredOutput({});
+
+const response = await structuredModel.invoke([
+  { role: "system", content: "<task>object_detection</task>" },
+  {
+    role: "user",
+    content: [
+      { type: "text", text: "Detect objects in this image" },
+      { type: "image_url", image_url: { url: "<url>" } },
+    ],
+  },
+]);
+```
+
+### Python — OpenAI SDK
+
+```python
 response = interfaze.chat.completions.create(
     model="interfaze-beta",
     messages=[
+        {"role": "system", "content": "<task>object_detection</task>"},
         {
             "role": "user",
             "content": [
-                {"type": "text", "text": "Detect all vehicles and pedestrians in this image"},
-                {"type": "image_url", "image_url": {"url": "https://example.com/street.jpg"}},
+                {"type": "text", "text": "Detect objects in this image"},
+                {"type": "image_url", "image_url": {"url": "<url>"}},
             ],
-        }
+        },
     ],
     response_format={
         "type": "json_schema",
-        "json_schema": {"name": "traffic_schema", "schema": TrafficSchema.model_json_schema()},
+        "json_schema": {
+            "name": "empty_schema",
+            "schema": {"type": "object", "properties": {}, "additionalProperties": True},
+        },
     },
 )
 ```
 
-The other SDK variants follow the same shape as the first example — only the schema changes.
+### Python — LangChain SDK
 
-## Run task mode (raw output)
+```python
+from langchain_core.messages import SystemMessage, HumanMessage
 
-For maximum speed and lowest cost without a custom schema, use `<task>object_detection</task>` in the system message. See [references/api.md](references/api.md) for the full multi-SDK breakdown.
+structured = interfaze.with_structured_output({
+    "name": "empty_schema",
+    "schema": {"type": "object", "properties": {}, "additionalProperties": True},
+})
 
-## Available references
-
-- [references/api.md](references/api.md) — API usage details and raw task mode
-- [references/examples.md](references/examples.md) — Additional trigger examples and patterns
+response = structured.invoke([
+    SystemMessage(content="<task>object_detection</task>"),
+    HumanMessage(content=[
+        {"type": "text", "text": "Detect objects in this image"},
+        {"type": "image_url", "image_url": {"url": "<url>"}},
+    ]),
+])
+```
